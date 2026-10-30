@@ -25,7 +25,7 @@ Two processes share one database: `npm run dev|start` (web) and `npm run worker`
 ## Token encryption and key management
 - AES-256-GCM, random 96-bit IV per value, format `v1.<keyVersion>.<iv>.<tag>.<ciphertext>`.
 - **AAD** = `userId:accountId:access|refresh`, so a ciphertext copied to another row/user fails to decrypt.
-- Key ring: `ENCRYPTION_KEYS="1:<b64>,2:<b64>"`, `ENCRYPTION_KEY_CURRENT=2`. New writes use the current key; old versions stay readable. **Rotation:** add the new key, bump CURRENT, (optional) run a re-encrypt script using `needsRotation()`, remove the old key only after all rows are re-encrypted. A re-encrypt script is *not* written yet (Gemini task).
+- Key ring: `ENCRYPTION_KEYS="1:<b64>,2:<b64>"`, `ENCRYPTION_KEY_CURRENT=2`. New writes use the current key; old versions stay readable. **Rotation:** add the new key, bump CURRENT, re-encrypt stored values using `needsRotation()`, then remove the old key only after all rows are re-encrypted. No automated rotation command is included yet.
 - Keys live only in the environment / secret manager. In production use a KMS-wrapped key or managed secret store; losing the key means users must reconnect Gmail (tokens are not recoverable by design).
 - Gmail tokens are **not** stored in Better Auth's `accounts` table (Google sign-in tokens there are identity-only and a separate concern).
 - Logs: `src/lib/log.ts` redacts token/secret/body-like keys. Code never logs email bodies or tokens.
@@ -33,6 +33,10 @@ Two processes share one database: `npm run dev|start` (web) and `npm run worker`
 ## Notification reliability (the important part)
 `notification_attempts.status`: `PENDING → SENDING → ACCEPTED → SENT → DELIVERED → READ`, or `FAILED`, or `UNKNOWN`.
 - **Claim before send:** worker does `UPDATE … SET status='SENDING' WHERE status='PENDING'`; only the winner calls the provider. Restarts/duplicate jobs see non-PENDING and do nothing.
+
+## Local verification
+
+The verified local path uses PostgreSQL, the mock AI provider, synthetic Gmail data, and the mock WhatsApp provider. `npm run dev` serves the dashboard and `npm run worker` processes the durable queue; importing worker helpers in tests does not start the worker loop. Live provider behavior remains gated by environment credentials and the WhatsApp allow-list.
 - **Provider outcomes:** accepted (has `wamid`) → ACCEPTED; definite rejection (4xx) → FAILED; rate limit (HTTP 429 / codes 130429, 131056, 80007) → revert to PENDING and retry with backoff (30s·2ⁿ, ≤15 min, 5 attempts, then FAILED); timeout / network error / 5xx / 200 without an id → **UNKNOWN, never auto-resent** (the Cloud API has no idempotency key). A crash mid-send leaves SENDING; the sweeper marks it UNKNOWN after 2 minutes.
 - **Resolving UNKNOWN:** the owner checks WhatsApp and clicks "received" (→ DELIVERED, flagged manual) or "not received" (→ FAILED, re-opens a deliberate resend).
 - **No duplicate alerts:** one active attempt per `(user, destination, summary, kind)`; repeat requests return the existing attempt. SUMMARY alerts are also blocked after ACCEPTED+; only FAILED allows another.

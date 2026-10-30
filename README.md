@@ -1,7 +1,7 @@
 # Mail Bridge AI
 
 Connect Gmail → pick an email → AI summary → save → WhatsApp notification → delivery status.
-Phase 1 prototype. **Status: written but not yet installed, compiled or run end-to-end** (authoring environment had no network). Read `docs/HANDOFF.md` and `docs/TESTING.md` first.
+Phase 1 prototype. The local demo path is installed, migrated, built, and verified. Live Gmail, Anthropic, and WhatsApp provider flows still require owner credentials and explicit test authorization; see `docs/HANDOFF.md`.
 
 ## Requirements
 Node.js ≥ 22.18, npm ≥ 10, PostgreSQL 14+ (local). Windows, macOS or Linux.

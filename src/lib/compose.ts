@@ -18,7 +18,7 @@ export function textBody(s: Composable): string {
 export function composeDigestBody(summaries: Composable[], dateStr: string): string {
   const lines = [
     `📬 Mail Bridge AI Daily Digest (${dateStr})`,
-    `You have ${summaries.length} email summary${summaries.length === 1 ? "" : "s"}:`,
+    `You have ${summaries.length} email summar${summaries.length === 1 ? "y" : "ies"}:`,
     "",
   ];
   for (const s of summaries.slice(0, 8)) {

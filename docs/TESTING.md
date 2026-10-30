@@ -1,12 +1,12 @@
 # Testing
 
-## Environment where this was authored
-Linux sandbox, Node v22.22.2, **no network** (`npm install` impossible), no PostgreSQL, no Prisma/Next installed. Therefore only code that has no third-party imports could be executed.
+## Current verification environment
+Windows, Node v22.23.2, npm 10.9.8, installed dependencies, and a migrated local PostgreSQL database loaded from `.env`.
 
 ## What was actually run
 
-### Unit tests: `npm test` (equivalent: `node --test "tests/unit/*.test.ts"`): **25 passed, 0 failed**
-Run with Node's built-in runner and native TypeScript stripping (no install needed).
+### Unit tests: `npm test`: **28 passed, 0 failed**
+Run with Node's built-in runner. The worker entrypoint is guarded so importing scheduling helpers does not start a background loop during tests.
 
 | Area | Tests (all passing) |
 |---|---|
@@ -20,25 +20,21 @@ Run with Node's built-in runner and native TypeScript stripping (no install need
 | Reliability helpers | backoff growth/cap/jitter; delivery-status monotonicity (dup/out-of-order); quiet hours incl. overnight + timezone + disabled; next-end calculation |
 | WhatsApp composition | template params single-line/bounded; text omits unsupported fields |
 
-### Static checks
-- `tsc --noEmit` was run with dependencies missing: **0 syntax errors (TS1xxx)**. The remaining ~380 diagnostics are all caused by uninstalled packages/types (`@types/node`, `react`, `next`, `@prisma/client`, `zod`, `better-auth`). **This is not a passing typecheck.**
-- Migration vs schema structural cross-check (script): 15/15 tables, 13 unique indexes, 15 indexes, 19 foreign keys present on both sides. **Not** a substitute for Prisma validating it.
+### Static and integration checks
+- `npm run typecheck`: **passed**
+- `npm run build`: **passed** (`next build`; Prisma client generated successfully)
+- `npm run test:integration`: **1 passed, 0 failed** (user isolation)
+- `npx prisma validate`: **passed**
+- `npm run worker:once`: **passed** (no due jobs; housekeeping completed)
+- `npm run db:drift-check`: **blocked** because the current `SHADOW_DATABASE_URL` is a relative/invalid URL; set a valid PostgreSQL shadow URL and rerun before release.
 
-## NOT run (no result exists: do not assume these pass)
+## Provider and release checks not verified locally
 | Item | Command |
 |---|---|
-| Dependency install / lockfile | `npm install` |
-| Prisma schema validation | `npx prisma validate` |
-| Migration applies to empty DB | `npm run db:migrate` |
 | Migration ↔ schema drift | `npm run db:drift-check` (needs `SHADOW_DATABASE_URL`) |
-| Typecheck | `npm run typecheck` |
-| Production build | `npm run build` |
-| Isolation/idempotency/cascade integration test | `npm run test:integration` (requires migrated DB + env) |
 | Worker end-to-end (demo) | `npm run worker:once` after queuing from the UI |
 | Browser run of every screen | manual |
 | **Any live Gmail / AI / WhatsApp call** | see HANDOFF |
-
-Expect some fixes on first typecheck/build: Better Auth and Prisma API usage was written without the libraries present.
 
 ## Manual test checklist (demo)
 1. Sign up/in/out; hitting `/dashboard` or `/api/emails` signed-out → redirect / 401.

@@ -124,4 +124,6 @@ async function main() {
   }
   await prisma.$disconnect();
 }
-main().catch((e) => { log("error", "worker_crashed", { err: String(e?.message) }); process.exit(1); });
+if (process.argv[1] && /[\\/]worker[\\/]index\.(?:ts|js)$/.test(process.argv[1])) {
+  main().catch((e) => { log("error", "worker_crashed", { err: String(e?.message) }); process.exit(1); });
+}
