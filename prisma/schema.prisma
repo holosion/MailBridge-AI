@@ -7,14 +7,61 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum ConnectionStatus { ACTIVE NEEDS_REAUTH DISCONNECTED }
-enum Priority { LOW NORMAL HIGH URGENT }
-enum DestinationStatus { PENDING VERIFIED REVOKED }
-enum NotificationKind { TEST SUMMARY }
-enum SendMode { TEMPLATE TEXT }
-enum AttemptStatus { PENDING SENDING ACCEPTED SENT DELIVERED READ FAILED UNKNOWN }
-enum JobStatus { QUEUED RUNNING SUCCEEDED DEAD }
-enum JobType { SEND_NOTIFICATION SYNC_EMAILS SWEEP_STUCK_ATTEMPTS PURGE_RETENTION }
+enum ConnectionStatus {
+  ACTIVE
+  NEEDS_REAUTH
+  DISCONNECTED
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum DestinationStatus {
+  PENDING
+  VERIFIED
+  REVOKED
+}
+
+enum NotificationKind {
+  TEST
+  SUMMARY
+  DIGEST
+}
+
+enum SendMode {
+  TEMPLATE
+  TEXT
+}
+
+enum AttemptStatus {
+  PENDING
+  SENDING
+  ACCEPTED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  UNKNOWN
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  DEAD
+}
+
+enum JobType {
+  SEND_NOTIFICATION
+  SYNC_EMAILS
+  SWEEP_STUCK_ATTEMPTS
+  PURGE_RETENTION
+  DAILY_DIGEST
+}
 
 // ---------- Authentication (Better Auth core tables; field names are dictated by the library) ----------
 model User {
@@ -103,6 +150,7 @@ model ConnectedEmailAccount {
   refreshTokenEnc      String?
   accessTokenExpiresAt DateTime?
   lastError            String?
+  lastSyncAt           DateTime?
   connectedAt          DateTime         @default(now())
   disconnectedAt       DateTime?
   createdAt            DateTime         @default(now())
@@ -216,14 +264,20 @@ model ConsentRecord {
 }
 
 model NotificationPreference {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  timezone         String   @default("UTC")
-  quietHoursStart  String   @default("22:00")
-  quietHoursEnd    String   @default("07:00")
-  notificationsEnabled Boolean @default(true)
-  updatedAt        DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timezone              String   @default("UTC")
+  quietHoursStart       String   @default("22:00")
+  quietHoursEnd         String   @default("07:00")
+  notificationsEnabled  Boolean  @default(true)
+  minPriority           Priority @default(HIGH)
+  digestEnabled         Boolean  @default(true)
+  digestTime            String   @default("08:00")
+  lastDigestSentAt      DateTime?
+  autoSyncEnabled       Boolean  @default(true)
+  syncIntervalMinutes   Int      @default(15)
+  updatedAt             DateTime @updatedAt
 
   @@map("notification_preferences")
 }

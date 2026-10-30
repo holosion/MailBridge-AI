@@ -5,7 +5,7 @@ import { backoffMs } from "./retry.ts";
 export interface ClaimedJob { id: string; userId: string | null; type: string; payload: any; attempts: number; maxAttempts: number }
 
 /** Creates a job unless one with the same dedupeKey exists (unique constraint). Returns false if it was a duplicate. */
-export async function enqueue(job: { userId?: string; type: "SEND_NOTIFICATION" | "SWEEP_STUCK_ATTEMPTS" | "PURGE_RETENTION"; dedupeKey: string; payload?: object; runAt?: Date }) {
+export async function enqueue(job: { userId?: string; type: "SEND_NOTIFICATION" | "SYNC_EMAILS" | "SWEEP_STUCK_ATTEMPTS" | "PURGE_RETENTION" | "DAILY_DIGEST"; dedupeKey: string; payload?: object; runAt?: Date }) {
   try {
     await prisma.backgroundJob.create({ data: { userId: job.userId, type: job.type, dedupeKey: job.dedupeKey, payload: job.payload ?? {}, runAt: job.runAt ?? new Date() } });
     return true;

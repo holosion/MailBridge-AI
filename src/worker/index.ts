@@ -1,9 +1,12 @@
 // Separate long-running process: `npm run worker` (or `npm run worker:once` to drain due jobs and exit).
 import { prisma } from "../lib/db.ts";
 import { claimNext, defer, enqueue, fail, succeed, type ClaimedJob } from "../lib/jobs.ts";
-import { DeferError, failPendingAttempt, processSendJob, sweepStuckAttempts } from "../lib/notify.ts";
+import { DeferError, failPendingAttempt, processSendJob, sweepStuckAttempts, requestNotification } from "../lib/notify.ts";
 import { purgeRetention } from "../lib/retention.ts";
 import { log } from "../lib/log.ts";
+
+import { syncGmailAccount } from "../lib/gmail-sync.ts";
+import { parseHHmm } from "../lib/quiet-hours.ts";
 
 const once = process.argv.includes("--once");
 let stopping = false;
@@ -12,9 +15,26 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => { stoppi
 async function handle(job: ClaimedJob) {
   switch (job.type) {
     case "SEND_NOTIFICATION": return processSendJob(job);
+    case "SYNC_EMAILS": {
+      if (!job.userId) return;
+      const res = await syncGmailAccount(job.userId, job.payload?.accountId);
+      log("info", "sync_job_completed", { userId: job.userId, newEmails: res.newEmails, newSummaries: res.newSummaries });
+      return;
+    }
+    case "DAILY_DIGEST": {
+      if (!job.userId) return;
+      const dest = await prisma.notificationDestination.findFirst({ where: { userId: job.userId, status: "VERIFIED" } });
+      if (!dest) {
+        log("info", "digest_skipped_no_verified_destination", { userId: job.userId });
+        return;
+      }
+      const dateStr = String(job.payload?.dateStr ?? new Date().toISOString().slice(0, 10));
+      await requestNotification(job.userId, { destinationId: dest.id, kind: "DIGEST", digestDate: dateStr });
+      return;
+    }
     case "SWEEP_STUCK_ATTEMPTS": return void log("info", "swept", { count: await sweepStuckAttempts() });
     case "PURGE_RETENTION": return void log("info", "retention_done", await purgeRetention());
-    default: throw new Error(`Unhandled job type ${job.type}`); // SYNC_EMAILS is modelled but not implemented in Phase 1
+    default: throw new Error(`Unhandled job type ${job.type}`);
   }
 }
 async function runOne(job: ClaimedJob) {
@@ -30,10 +50,67 @@ async function runOne(job: ClaimedJob) {
     if (dead && job.type === "SEND_NOTIFICATION" && job.userId) await failPendingAttempt(job.userId, job.payload?.attemptId, msg);
   }
 }
+
+export function isDigestDue(pref: { timezone: string; digestTime: string; lastDigestSentAt: Date | null }, now = new Date()): { due: boolean; dateStr: string } {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: pref.timezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+    const dateStr = new Intl.DateTimeFormat("en-CA", { timeZone: pref.timezone }).format(now); // YYYY-MM-DD
+    const currentMins = parseHHmm(parts);
+    const targetMins = parseHHmm(pref.digestTime);
+    if (currentMins === null || targetMins === null || currentMins < targetMins) {
+      return { due: false, dateStr };
+    }
+    if (!pref.lastDigestSentAt) {
+      return { due: true, dateStr };
+    }
+    const lastSentDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: pref.timezone }).format(pref.lastDigestSentAt);
+    return { due: lastSentDateStr !== dateStr, dateStr };
+  } catch {
+    return { due: false, dateStr: now.toISOString().slice(0, 10) };
+  }
+}
+
 async function scheduleHousekeeping() {
   const now = new Date(), minute = now.toISOString().slice(0, 16), day = now.toISOString().slice(0, 10);
   await enqueue({ type: "SWEEP_STUCK_ATTEMPTS", dedupeKey: `sweep:${minute}` });
   await enqueue({ type: "PURGE_RETENTION", dedupeKey: `purge:${day}` });
+
+  // 1. Automatic email synchronization scheduling
+  const connections = await prisma.connectedEmailAccount.findMany({
+    where: { status: "ACTIVE" },
+    include: { user: { include: { preference: true } } },
+  });
+  for (const conn of connections) {
+    const pref = conn.user.preference;
+    if (pref && !pref.autoSyncEnabled) continue;
+    const intervalMins = pref?.syncIntervalMinutes ?? 15;
+    const threshold = new Date(Date.now() - intervalMins * 60_000);
+    if (!conn.lastSyncAt || conn.lastSyncAt < threshold) {
+      const slot = Math.floor(Date.now() / (intervalMins * 60_000));
+      await enqueue({
+        userId: conn.userId,
+        type: "SYNC_EMAILS",
+        dedupeKey: `sync:${conn.id}:${slot}`,
+        payload: { accountId: conn.id },
+      });
+    }
+  }
+
+  // 2. Automatic daily digest scheduling
+  const prefs = await prisma.notificationPreference.findMany({
+    where: { digestEnabled: true, notificationsEnabled: true },
+  });
+  for (const p of prefs) {
+    const { due, dateStr } = isDigestDue(p, now);
+    if (due) {
+      await enqueue({
+        userId: p.userId,
+        type: "DAILY_DIGEST",
+        dedupeKey: `digest:${p.userId}:${dateStr}`,
+        payload: { dateStr },
+      });
+    }
+  }
 }
 async function main() {
   log("info", "worker_started", { once });

@@ -4,13 +4,19 @@ import { env } from "./env.ts";
 import { HttpError } from "./errors.ts";
 import { normalizeE164 } from "./phone.ts";
 import { inQuietHours, nextQuietEnd } from "./quiet-hours.ts";
-import { templateParams, textBody } from "./compose.ts";
+import { templateParams, textBody, composeDigestBody } from "./compose.ts";
 import { sendWhatsApp, type SendRequest } from "./whatsapp.ts";
 import { assertWithinQuota, recordUsage } from "./usage.ts";
 import { log } from "./log.ts";
 
 export const CONSENT_TEXT_VERSION = "2026-10-v1"; // text shown in the UI; bump when wording changes
-export class DeferError extends Error { constructor(public runAt: Date) { super("deferred"); } }
+export class DeferError extends Error {
+  runAt: Date;
+  constructor(runAt: Date) {
+    super("deferred");
+    this.runAt = runAt;
+  }
+}
 export class RetryError extends Error {}
 
 // ---- destinations & consent -------------------------------------------------
@@ -43,11 +49,12 @@ export async function revokeDestination(userId: string, id: string) {
 }
 
 // ---- requesting a notification (idempotent) ----------------------------------
-const BLOCKING: Record<"TEST" | "SUMMARY", string[]> = {
+const BLOCKING: Record<"TEST" | "SUMMARY" | "DIGEST", string[]> = {
   TEST: ["PENDING", "SENDING", "UNKNOWN"],                                                        // another test may follow a finished one
   SUMMARY: ["PENDING", "SENDING", "UNKNOWN", "ACCEPTED", "SENT", "DELIVERED", "READ"],            // one alert per summary+destination unless it FAILED
+  DIGEST: ["PENDING", "SENDING", "UNKNOWN", "ACCEPTED", "SENT", "DELIVERED", "READ"],
 };
-export async function requestNotification(userId: string, a: { destinationId: string; kind: "TEST" | "SUMMARY"; summaryId?: string }) {
+export async function requestNotification(userId: string, a: { destinationId: string; kind: "TEST" | "SUMMARY" | "DIGEST"; summaryId?: string; digestDate?: string }) {
   const dest = await prisma.notificationDestination.findFirst({ where: { id: a.destinationId, userId } });
   if (!dest) throw new HttpError(404, "destination_not_found");
   if (dest.status !== "VERIFIED") throw new HttpError(409, "destination_not_verified", "Verify this number first");
@@ -63,7 +70,10 @@ export async function requestNotification(userId: string, a: { destinationId: st
   const latest = await prisma.notificationAttempt.findFirst({ where: tuple, orderBy: { createdAt: "desc" } });
   if (latest && BLOCKING[a.kind].includes(latest.status)) return { attempt: latest, duplicate: true };
   const ordinal = await prisma.notificationAttempt.count({ where: tuple });
-  const requestKey = `${a.kind}:${userId}:${dest.id}:${a.summaryId ?? "test"}:${ordinal}`;
+  const requestKey = a.kind === "DIGEST"
+    ? `DIGEST:${userId}:${dest.id}:${a.digestDate ?? new Date().toISOString().slice(0, 10)}:${ordinal}`
+    : `${a.kind}:${userId}:${dest.id}:${a.summaryId ?? "test"}:${ordinal}`;
+
   try {
     const attempt = await prisma.$transaction(async (tx) => {
       const att = await tx.notificationAttempt.create({ data: { userId, destinationId: dest.id, summaryId: a.summaryId, kind: a.kind, requestKey, isDemo: env().WHATSAPP_PROVIDER === "mock" } });
@@ -95,7 +105,7 @@ export async function processSendJob(job: { userId: string | null; payload: any 
   if (a.destination.status !== "VERIFIED" || !consent) return finish(a.id, userId, { status: "FAILED", errorCode: "NO_CONSENT", errorMessage: "Destination not verified or consent revoked" });
   const pref = await prisma.notificationPreference.findUnique({ where: { userId } });
   if (pref && !pref.notificationsEnabled) return finish(a.id, userId, { status: "FAILED", errorCode: "NOTIFICATIONS_DISABLED", errorMessage: "Notifications disabled" });
-  if (a.kind === "SUMMARY" && pref && inQuietHours(new Date(), pref.timezone, pref.quietHoursStart, pref.quietHoursEnd))
+  if ((a.kind === "SUMMARY" || a.kind === "DIGEST") && pref && inQuietHours(new Date(), pref.timezone, pref.quietHoursStart, pref.quietHoursEnd))
     throw new DeferError(nextQuietEnd(new Date(), pref.timezone, pref.quietHoursEnd));
 
   const to = a.destination.e164;
@@ -104,6 +114,23 @@ export async function processSendJob(job: { userId: string | null; payload: any 
   let req: SendRequest | null;
   if (a.kind === "TEST") {
     req = windowOpen ? { to, mode: "TEXT", text: "Mail Bridge AI test message. If you can read this, delivery works." } : { to, mode: "TEMPLATE", template: { name: e.WHATSAPP_TEMPLATE_TEST, lang: e.WHATSAPP_TEMPLATE_LANG, params: [] } };
+  } else if (a.kind === "DIGEST") {
+    const since = new Date(Date.now() - 24 * 3_600_000);
+    const summaries = await prisma.summary.findMany({
+      where: { userId, createdAt: { gte: since } },
+      orderBy: { createdAt: "desc" },
+      take: 15,
+    });
+    if (!summaries.length) {
+      return finish(a.id, userId, { status: "FAILED", errorCode: "NO_SUMMARIES_FOR_DIGEST", errorMessage: "No email summaries found in the last 24h for a digest" });
+    }
+    const dateLabel = new Intl.DateTimeFormat("en-US", { timeZone: pref?.timezone ?? "UTC", month: "short", day: "numeric" }).format(new Date());
+    const digestText = composeDigestBody(summaries, dateLabel);
+    req = windowOpen
+      ? { to, mode: "TEXT", text: digestText }
+      : e.WHATSAPP_TEMPLATE_SUMMARY
+        ? { to, mode: "TEMPLATE", template: { name: e.WHATSAPP_TEMPLATE_SUMMARY, lang: e.WHATSAPP_TEMPLATE_LANG, params: ["Mail Bridge AI", `Digest: ${summaries.length} items`, digestText.slice(0, 300), "Review dashboard", "NORMAL"] } }
+        : null;
   } else if (a.summary) {
     const c = { ...a.summary };
     req = e.WHATSAPP_TEMPLATE_SUMMARY ? { to, mode: "TEMPLATE", template: { name: e.WHATSAPP_TEMPLATE_SUMMARY, lang: e.WHATSAPP_TEMPLATE_LANG, params: templateParams(c) } }
@@ -121,6 +148,9 @@ export async function processSendJob(job: { userId: string | null; payload: any 
   if (result.kind === "accepted") {
     const demo = result.provider === "mock";
     await finish(a.id, userId, { status: demo ? "DELIVERED" : "ACCEPTED", providerName: result.provider, providerMessageId: result.messageId, isDemo: demo, errorCode: null, errorMessage: null });
+    if (a.kind === "DIGEST") {
+      await prisma.notificationPreference.updateMany({ where: { userId }, data: { lastDigestSentAt: new Date() } });
+    }
     const now = new Date();
     await prisma.deliveryEvent.create({ data: { userId, attemptId: a.id, provider: result.provider, providerEventId: `${result.messageId}:accepted`, providerMessageId: result.messageId, status: "accepted", occurredAt: now } });
     if (demo) await prisma.deliveryEvent.create({ data: { userId, attemptId: a.id, provider: "mock", providerEventId: `${result.messageId}:delivered`, providerMessageId: result.messageId, status: "delivered", occurredAt: now, detail: { demo: true } } });

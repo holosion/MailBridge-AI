@@ -15,3 +15,32 @@ export async function recordUsage(userId: string, metric: "summaries" | "notific
     create: { userId, metric, period: period(), quantity: 1 }, update: { quantity: { increment: 1 } },
   });
 }
+
+export async function getUsageStats(userId: string) {
+  const currentPeriod = period();
+  const summaryLimit = env().MONTHLY_SUMMARY_LIMIT;
+  const notificationLimit = env().MONTHLY_NOTIFICATION_LIMIT;
+
+  const records = await prisma.usageRecord.findMany({
+    where: { userId, period: currentPeriod },
+  });
+
+  const summaryCount = records.find((r) => r.metric === "summaries")?.quantity ?? 0;
+  const notificationCount = records.find((r) => r.metric === "notifications")?.quantity ?? 0;
+
+  return {
+    period: currentPeriod,
+    summaries: {
+      used: summaryCount,
+      limit: summaryLimit,
+      remaining: Math.max(0, summaryLimit - summaryCount),
+      pct: summaryLimit > 0 ? Math.min(100, Math.round((summaryCount / summaryLimit) * 100)) : 0,
+    },
+    notifications: {
+      used: notificationCount,
+      limit: notificationLimit,
+      remaining: Math.max(0, notificationLimit - notificationCount),
+      pct: notificationLimit > 0 ? Math.min(100, Math.round((notificationCount / notificationLimit) * 100)) : 0,
+    },
+  };
+}

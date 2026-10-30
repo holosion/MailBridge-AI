@@ -14,3 +14,24 @@ export function textBody(s: Composable): string {
   lines.push(`Priority: ${s.priority}`);
   return lines.join("\n");
 }
+
+export function composeDigestBody(summaries: Composable[], dateStr: string): string {
+  const lines = [
+    `📬 Mail Bridge AI Daily Digest (${dateStr})`,
+    `You have ${summaries.length} email summary${summaries.length === 1 ? "" : "s"}:`,
+    "",
+  ];
+  for (const s of summaries.slice(0, 8)) {
+    const sender = flat(s.senderName || s.senderEmail, 25);
+    const subject = flat(s.subject, 35);
+    const action = s.requiredAction ? ` · Action: ${flat(s.requiredAction, 40)}` : "";
+    const deadline = s.deadlineText ? ` (Due: ${flat(s.deadlineText, 25)})` : "";
+    lines.push(`• [${s.priority}] ${sender}: ${subject}${action}${deadline}`);
+  }
+  if (summaries.length > 8) {
+    lines.push(`…and ${summaries.length - 8} more in your dashboard.`);
+  }
+  lines.push("");
+  lines.push("Open Mail Bridge AI dashboard to view full details.");
+  return lines.join("\n");
+}

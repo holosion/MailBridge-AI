@@ -116,4 +116,5 @@ export async function disconnect(userId: string) {
   }
   await prisma.connectedEmailAccount.updateMany({ where: { id: acct.id, userId }, data: { status: "DISCONNECTED", accessTokenEnc: null, refreshTokenEnc: null, accessTokenExpiresAt: null, disconnectedAt: new Date() } });
   await prisma.emailRecord.updateMany({ where: { userId, connectedAccountId: acct.id }, data: { bodyText: null } });
+  await prisma.syncCheckpoint.deleteMany({ where: { accountId: acct.id } });
 }
