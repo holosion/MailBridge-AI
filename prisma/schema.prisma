@@ -1,0 +1,326 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConnectionStatus { ACTIVE NEEDS_REAUTH DISCONNECTED }
+enum Priority { LOW NORMAL HIGH URGENT }
+enum DestinationStatus { PENDING VERIFIED REVOKED }
+enum NotificationKind { TEST SUMMARY }
+enum SendMode { TEMPLATE TEXT }
+enum AttemptStatus { PENDING SENDING ACCEPTED SENT DELIVERED READ FAILED UNKNOWN }
+enum JobStatus { QUEUED RUNNING SUCCEEDED DEAD }
+enum JobType { SEND_NOTIFICATION SYNC_EMAILS SWEEP_STUCK_ATTEMPTS PURGE_RETENTION }
+
+// ---------- Authentication (Better Auth core tables; field names are dictated by the library) ----------
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  connections   ConnectedEmailAccount[]
+  emails        EmailRecord[]
+  summaries     Summary[]
+  destinations  NotificationDestination[]
+  consents      ConsentRecord[]
+  preference    NotificationPreference?
+  attempts      NotificationAttempt[]
+  events        DeliveryEvent[]
+  jobs          BackgroundJob[]
+  usage         UsageRecord[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// ---------- Email ----------
+// Gmail tokens live ONLY here (AES-256-GCM, see docs/ARCHITECTURE.md), never in Better Auth's accounts table.
+model ConnectedEmailAccount {
+  id                   String           @id @default(cuid())
+  userId               String
+  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider             String           @default("gmail")
+  emailAddress         String
+  scopes               String
+  status               ConnectionStatus @default(ACTIVE)
+  accessTokenEnc       String?
+  refreshTokenEnc      String?
+  accessTokenExpiresAt DateTime?
+  lastError            String?
+  connectedAt          DateTime         @default(now())
+  disconnectedAt       DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  emails      EmailRecord[]
+  checkpoints SyncCheckpoint[]
+
+  @@unique([userId, provider, emailAddress])
+  @@index([userId])
+  @@map("connected_email_accounts")
+}
+
+model EmailRecord {
+  id                String                 @id @default(cuid())
+  userId            String
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectedAccountId String?
+  connectedAccount  ConnectedEmailAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: SetNull)
+  provider          String                 @default("gmail")
+  providerMessageId String
+  threadId          String?
+  subject           String
+  senderName        String?
+  senderEmail       String
+  snippet           String?
+  bodyText          String? // truncated; nulled by retention after RETENTION_BODY_DAYS
+  receivedAt        DateTime
+  permalink         String
+  isDemo            Boolean                @default(false)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  summaries Summary[]
+
+  @@unique([userId, provider, providerMessageId])
+  @@index([userId, receivedAt(sort: Desc)])
+  @@index([createdAt])
+  @@map("email_records")
+}
+
+model Summary {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailRecordId    String?
+  emailRecord      EmailRecord? @relation(fields: [emailRecordId], references: [id], onDelete: SetNull)
+  // Denormalised so a summary stays meaningful after the email record is purged.
+  subject          String
+  senderName       String?
+  senderEmail      String
+  providerMessageId String
+  permalink        String
+  mainMessage      String
+  requiredAction   String?
+  deadlineText     String?
+  deadlineEvidence String?
+  priority         Priority
+  priorityReason   String
+  aiProvider       String
+  aiModel          String
+  promptVersion    String
+  warnings         String[]
+  isDemo           Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  attempts NotificationAttempt[]
+
+  @@unique([emailRecordId, promptVersion])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("summaries")
+}
+
+// ---------- Notifications ----------
+// One WhatsApp number belongs to exactly one account ("one number, one account") so inbound webhooks cannot verify two users.
+model NotificationDestination {
+  id            String            @id @default(cuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel       String            @default("whatsapp")
+  e164          String
+  status        DestinationStatus @default(PENDING)
+  verifiedAt    DateTime?
+  verificationMethod String?
+  lastInboundAt DateTime? // start of the 24h customer-service window
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  consents ConsentRecord[]
+  attempts NotificationAttempt[]
+
+  @@unique([channel, e164])
+  @@index([userId])
+  @@map("notification_destinations")
+}
+
+model ConsentRecord {
+  id            String                  @id @default(cuid())
+  userId        String
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination   NotificationDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  textVersion   String
+  source        String
+  grantedAt     DateTime                @default(now())
+  revokedAt     DateTime?
+
+  @@index([userId, destinationId])
+  @@map("consent_records")
+}
+
+model NotificationPreference {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timezone         String   @default("UTC")
+  quietHoursStart  String   @default("22:00")
+  quietHoursEnd    String   @default("07:00")
+  notificationsEnabled Boolean @default(true)
+  updatedAt        DateTime @updatedAt
+
+  @@map("notification_preferences")
+}
+
+model NotificationAttempt {
+  id                String                  @id @default(cuid())
+  userId            String
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destinationId     String
+  destination       NotificationDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  summaryId         String?
+  summary           Summary?                @relation(fields: [summaryId], references: [id], onDelete: SetNull)
+  kind              NotificationKind
+  mode              SendMode?
+  status            AttemptStatus           @default(PENDING)
+  requestKey        String                  @unique // idempotency: one logical notification == one attempt row
+  providerName      String?                 // "whatsapp_cloud" | "mock"
+  providerMessageId String?                 @unique
+  errorCode         String?
+  errorMessage      String?
+  resolvedManually  Boolean                 @default(false)
+  isDemo            Boolean                 @default(false)
+  sendStartedAt     DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  events DeliveryEvent[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, sendStartedAt])
+  @@map("notification_attempts")
+}
+
+model DeliveryEvent {
+  id                String               @id @default(cuid())
+  userId            String?
+  user              User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attemptId         String?
+  attempt           NotificationAttempt? @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  provider          String
+  providerEventId   String // e.g. "<wamid>:delivered" or inbound message id: dedupes repeated webhook deliveries
+  providerMessageId String?
+  status            String
+  occurredAt        DateTime
+  detail            Json?
+  receivedAt        DateTime             @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([attemptId])
+  @@index([providerMessageId])
+  @@map("delivery_events")
+}
+
+// ---------- Background work ----------
+model BackgroundJob {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        JobType
+  dedupeKey   String    @unique // prevents duplicate jobs for the same logical work
+  payload     Json      @default("{}")
+  status      JobStatus @default(QUEUED)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  runAt       DateTime  @default(now())
+  lockedUntil DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, runAt])
+  @@index([userId])
+  @@map("background_jobs")
+}
+
+model SyncCheckpoint {
+  id          String                @id @default(cuid())
+  accountId   String
+  account     ConnectedEmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind        String
+  cursor      String?
+  lastRunAt   DateTime?
+  updatedAt   DateTime              @updatedAt
+
+  @@unique([accountId, kind])
+  @@map("sync_checkpoints")
+}
+
+model UsageRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metric    String   // "summaries" | "notifications"
+  period    String   // "YYYY-MM"
+  quantity  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, metric, period])
+  @@map("usage_records")
+}
