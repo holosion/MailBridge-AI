@@ -19,7 +19,7 @@ No repository existed at `C:\Users\AKENA\Desktop\mailBridge-AI` (path unavailabl
 
 ## Incomplete / not implemented
 - **No `package-lock.json`** (no network). Run `npm install` and commit it.
-- `SYNC_EMAILS` jobs and `sync_checkpoints` usage (modelled only; Phase 1 is user-selected emails)
+- Provider-specific live Gmail verification for `SYNC_EMAILS` and `sync_checkpoints` (the implementation is present; credentials are still required)
 - Key re-encryption script for rotation (`needsRotation()` exists)
 - Rate limiting of our own endpoints (Better Auth has its own for auth routes)
 - Privacy policy / terms pages (needed for Google verification and Meta)
@@ -144,18 +144,18 @@ The local implementation was run rather than accepted from the original handoff.
 |---|---|---|
 | Phase 1 completion | Implemented and verified | Demo flow, API routes, PostgreSQL schema, migrations, typecheck, build, and tests pass. |
 | Responsive accessible dashboard | Implemented and verified locally | Dashboard includes onboarding, Gmail, destination/consent, preferences, summaries, history, usage, account deletion, demo/error states. Browser accessibility review remains manual. |
-| Incremental Gmail sync | Implemented but unverified against Gmail | Persisted checkpoints, bounded batches, unique provider message protection, refresh/reconnect handling are in `gmail-sync.ts`; needs Google OAuth credentials. |
+| Incremental Gmail sync | Implemented but unverified against Gmail | Persisted cursor is now used in Gmail `after:` queries, with bounded batches, unique provider message protection, refresh/reconnect handling; needs Google OAuth credentials. |
 | Durable jobs and scheduling | Implemented and verified by unit/build checks | Queue leases, retries, quiet hours, timezone scheduling, rate/quota checks, and dead-job visibility are implemented; live worker delivery is not provider-verified. |
 | Priority filtering and daily digests | Implemented and verified | Priority tests and digest formatting/scheduling tests pass; live WhatsApp delivery is not verified. |
 | Grounded, injection-resistant AI | Implemented and verified with deterministic/mocked providers | Validation and prompt-injection tests pass; Anthropic API behavior remains unverified. |
 | Signed delivery webhooks | Implemented and verified for pure signature/state logic | Live Meta webhook registration and payload verification remain blocked on Meta credentials/public HTTPS. |
 | Usage tracking and limits | Implemented and verified by integration/build checks | No pricing or payments implemented by design; atomic subscription billing is future work. |
 | Disconnect, retention, account deletion | Implemented and verified by code/build/integration coverage | Live Google token revocation requires a real OAuth account. |
-| Meaningful isolation/sync/retry/scheduling/notification tests | Implemented and verified | `npm test`: 28 passed; `npm run test:integration`: 1 passed. |
+| Meaningful isolation/sync/retry/scheduling/notification tests | Implemented and verified | `npm test`: 29 passed; `npm run test:integration`: 1 passed. |
 
 ### Commands run
 
-- `npm test` — 28 passed, 0 failed.
+- `npm test` — 29 passed, 0 failed.
 - `npm run typecheck` — passed.
 - `npm run build` — passed.
 - `npm run test:integration` — 1 passed, 0 failed.
@@ -168,7 +168,7 @@ The local implementation was run rather than accepted from the original handoff.
 
 1. Configure `SHADOW_DATABASE_URL` and run `npm run db:drift-check` before release.
 2. Perform the manual demo checklist in `docs/TESTING.md` through a browser, including worker delivery and account deletion.
-3. Configure Google OAuth and verify connect, incremental sync, reconnect, revoke, and disconnect with a test Gmail account.
+3. Configure Google OAuth and verify connect, incremental cursor sync, reconnect, revoke, and disconnect with a test Gmail account.
 4. Configure Anthropic and verify a real summary plus the prompt-injection fixture; do not treat mock-provider tests as live AI verification.
 5. Configure Meta WhatsApp, approved templates, allow-listed test number, and an HTTPS webhook; verify send/status/replay/failure drills. Never remove the allow-list without explicit authorization.
 6. Add CI with PostgreSQL for typecheck, unit, migration, drift, integration, and build checks; add production secret/KMS and HTTPS deployment runbooks.

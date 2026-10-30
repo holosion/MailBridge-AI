@@ -81,9 +81,18 @@ async function gmailGet(userId: string, path: string, retried = false): Promise<
 export interface MailListItem { id: string; threadId: string; subject: string; senderName: string; senderEmail: string; snippet: string; receivedAt: string; permalink: string; summarized?: boolean }
 
 /** Bounded: at most `max` (<=25) recent inbox messages, metadata only. */
-export async function listRecent(userId: string, max = 15): Promise<MailListItem[]> {
+export function buildInboxQuery(cursor?: string | null): string {
+  const clauses = ["newer_than:14d"];
+  if (cursor) {
+    const millis = Number(cursor);
+    if (Number.isFinite(millis) && millis > 0) clauses.push(`after:${Math.floor(millis / 1000)}`);
+  }
+  return clauses.join(" ");
+}
+
+export async function listRecent(userId: string, max = 15, cursor?: string | null): Promise<MailListItem[]> {
   const { acct } = await accessToken(userId);
-  const list = await gmailGet(userId, `/messages?maxResults=${Math.min(max, 25)}&labelIds=INBOX&q=${encodeURIComponent("newer_than:14d")}`);
+  const list = await gmailGet(userId, `/messages?maxResults=${Math.min(max, 25)}&labelIds=INBOX&q=${encodeURIComponent(buildInboxQuery(cursor))}`);
   const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
   const out: MailListItem[] = [];
   for (let i = 0; i < ids.length; i += 5) {

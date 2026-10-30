@@ -22,7 +22,7 @@ Personal prototype for the owner's Gmail and WhatsApp, structured so multiple us
 | A3 | WhatsApp: free-form text only inside the 24h window after the user messages the business number; otherwise an approved **template**. The free test number can message only a small allow-list of recipients (third-party sources said 5, error 131030 otherwise). | Sources read were third-party, **not Meta's official docs**. The brief's "check current official documentation" is **not satisfied** for WhatsApp. |
 | A4 | Destination verification = user sends any message to the business number (proves control, opens the window). Dev shortcut `ALLOW_OWNER_ATTEST`. | Product choice. |
 | A5 | Graph API version default `v23.0`; Anthropic model default `claude-haiku-5-5`. | Both must be verified before live use. |
-| A6 | Phase 1 has no automatic inbox polling. The user selects emails. `SYNC_EMAILS` job type and checkpoints are modelled, not implemented. | Scope. |
+| A6 | Phase 1 supports bounded automatic inbox synchronization through the `SYNC_EMAILS` worker job. Users can configure the interval; persisted Gmail cursors and provider-message uniqueness prevent repeated ingestion. | Scope. |
 | A7 | One WhatsApp number belongs to one account (global unique). Gmail IDs are unique per user in our table (single mailbox per user in practice). | Prevents cross-account verification via inbound webhooks. |
 | A8 | Prisma pinned to 6.x and Next.js to 15.x to avoid Prisma 7 schema/config changes and the Next 16 middleware→proxy rename. | Revisit on upgrade. |
 | A9 | A third-party blog claimed Meta banned "general purpose AI" chatbots on the platform from Jan 2026. Mail Bridge is a one-way notification, not a chatbot, but this was not checked in official policy. | Policy risk for live use. |
@@ -37,4 +37,4 @@ Personal prototype for the owner's Gmail and WhatsApp, structured so multiple us
 7. **Live acceptance is only met after the steps in `docs/HANDOFF.md` → "Live verification" are executed.**
 
 ## Deferred
-Payments/subscriptions (quota seam exists, see ARCHITECTURE), automatic inbox sync and "usefulness" classification, multiple mailboxes, Outlook/IMAP, WhatsApp inbound commands, digest scheduling, admin UI, privacy policy/terms pages, Google app verification, per-user rate limiting beyond Better Auth's built-ins, observability/alerting.
+Payments/subscriptions (quota seam exists, see ARCHITECTURE), "usefulness" classification, multiple mailboxes, Outlook/IMAP, WhatsApp inbound commands, admin UI, privacy policy/terms pages, Google app verification, per-user rate limiting beyond Better Auth's built-ins, observability/alerting.

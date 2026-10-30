@@ -67,12 +67,16 @@ export async function requestNotification(userId: string, a: { destinationId: st
   await assertWithinQuota(userId, "notifications");
 
   const tuple = { userId, destinationId: dest.id, summaryId: a.summaryId ?? null, kind: a.kind };
-  const latest = await prisma.notificationAttempt.findFirst({ where: tuple, orderBy: { createdAt: "desc" } });
-  if (latest && BLOCKING[a.kind].includes(latest.status)) return { attempt: latest, duplicate: true };
-  const ordinal = await prisma.notificationAttempt.count({ where: tuple });
+  const digestDate = a.digestDate ?? new Date().toISOString().slice(0, 10);
   const requestKey = a.kind === "DIGEST"
-    ? `DIGEST:${userId}:${dest.id}:${a.digestDate ?? new Date().toISOString().slice(0, 10)}:${ordinal}`
-    : `${a.kind}:${userId}:${dest.id}:${a.summaryId ?? "test"}:${ordinal}`;
+    ? `DIGEST:${userId}:${dest.id}:${digestDate}`
+    : `${a.kind}:${userId}:${dest.id}:${a.summaryId ?? "test"}:${await prisma.notificationAttempt.count({ where: tuple })}`;
+  const existingByKey = await prisma.notificationAttempt.findUnique({ where: { requestKey } });
+  if (existingByKey && existingByKey.userId === userId) return { attempt: existingByKey, duplicate: true };
+  const latest = a.kind === "DIGEST"
+    ? null
+    : await prisma.notificationAttempt.findFirst({ where: tuple, orderBy: { createdAt: "desc" } });
+  if (latest && BLOCKING[a.kind].includes(latest.status)) return { attempt: latest, duplicate: true };
 
   try {
     const attempt = await prisma.$transaction(async (tx) => {

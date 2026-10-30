@@ -5,7 +5,7 @@ Windows, Node v22.23.2, npm 10.9.8, installed dependencies, and a migrated local
 
 ## What was actually run
 
-### Unit tests: `npm test`: **28 passed, 0 failed**
+### Unit tests: `npm test`: **29 passed, 0 failed**
 Run with Node's built-in runner. The worker entrypoint is guarded so importing scheduling helpers does not start a background loop during tests.
 
 | Area | Tests (all passing) |

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { buildInboxQuery } from "../../src/lib/gmail.ts";
 import { htmlToText, safeText } from "../../src/lib/sanitize.ts";
 import { extractBody, parseFrom, decodeBase64Url } from "../../src/lib/gmail-parse.ts";
 import { parseModelJson, validateSummary, SummaryValidationError } from "../../src/lib/summary-validate.ts";
@@ -25,6 +26,12 @@ test("extractBody prefers text/plain, falls back to html, skips attachments", ()
 test("parseFrom handles display names, bare addresses, quotes", () => {
   assert.deepEqual(parseFrom('"Dr. Okello" <Okello@Example.test>'), { name: "Dr. Okello", email: "okello@example.test" });
   assert.deepEqual(parseFrom("bare@example.test"), { name: "", email: "bare@example.test" });
+});
+
+test("Gmail incremental query uses a valid persisted cursor", () => {
+  assert.equal(buildInboxQuery(null), "newer_than:14d");
+  assert.equal(buildInboxQuery("1760000000000"), "newer_than:14d after:1760000000");
+  assert.equal(buildInboxQuery("not-a-timestamp"), "newer_than:14d");
 });
 const EMAIL = "Hello, please submit the signed form by Friday 7 November. Thanks";
 const good = { mainMessage: "Form needed.", requiredAction: { text: "Submit the signed form", evidence: "please submit the signed form" },

@@ -67,7 +67,7 @@ export async function syncGmailAccount(userId: string, accountId?: string, maxBa
   let rawList: { id: string }[] = [];
   try {
     // List bounded batch of recent messages
-    rawList = await listRecent(userId, maxBatch);
+    rawList = await listRecent(userId, maxBatch, checkpoint?.cursor);
   } catch (err: any) {
     if (err instanceof GmailAuthError) {
       await prisma.connectedEmailAccount.updateMany({
