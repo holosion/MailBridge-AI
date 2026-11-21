@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "53978851048",
+    "firebase_url": "https://gen-lang-client-0066594917.firebaseio.com",
+    "project_id": "gen-lang-client-0066594917",
+    "storage_bucket": "gen-lang-client-0066594917.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:53978851048:android:99d0d0a25789693e2e0b5d",
+        "android_client_info": {
+          "package_name": "com.mailbridge.ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCSZmMiyGuZ5t0IeOpaIlIUk_mSLubo4w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
