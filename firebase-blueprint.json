@@ -1,0 +1,413 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile, onboarding progress, and consent settings",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 320
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "onboardingCompleted": {
+          "type": "boolean"
+        },
+        "gmailConnected": {
+          "type": "boolean"
+        },
+        "aiConsentGranted": {
+          "type": "boolean"
+        },
+        "darkMode": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "onboardingCompleted",
+        "gmailConnected",
+        "aiConsentGranted",
+        "darkMode",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPreferences": {
+      "title": "UserPreferences",
+      "description": "Personalized priority categories, VIP senders, sensitivity, and quiet hours",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "focusCategories": {
+          "type": "array",
+          "description": "Up to 10 selected focus category keys"
+        },
+        "prioritySenders": {
+          "type": "array",
+          "description": "Up to 25 VIP sender email addresses or domains"
+        },
+        "sensitivity": {
+          "type": "string",
+          "enum": ["balanced", "strict", "high_recall"]
+        },
+        "quietHoursEnabled": {
+          "type": "boolean"
+        },
+        "quietHoursStart": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "maxLength": 5
+        },
+        "quietHoursEnd": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "maxLength": 5
+        },
+        "pushAlertsEnabled": {
+          "type": "boolean"
+        },
+        "whatsappAlertsEnabled": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "focusCategories",
+        "prioritySenders",
+        "sensitivity",
+        "quietHoursEnabled",
+        "quietHoursStart",
+        "quietHoursEnd",
+        "pushAlertsEnabled",
+        "whatsappAlertsEnabled",
+        "updatedAt"
+      ]
+    },
+    "WhatsAppConfig": {
+      "title": "WhatsAppConfig",
+      "description": "User-verified WhatsApp recipient phone number and opt-in state",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "verificationStatus": {
+          "type": "string",
+          "enum": ["unconfigured", "pending_verification", "verified", "disabled"]
+        },
+        "optInGranted": {
+          "type": "boolean"
+        },
+        "lastTestStatus": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "phoneNumber",
+        "verified",
+        "verificationStatus",
+        "optInGranted",
+        "lastTestStatus",
+        "updatedAt"
+      ]
+    },
+    "EmailInsight": {
+      "title": "EmailInsight",
+      "description": "Gemini structured email triage, summary, action item, and deadline keyed by Gmail message ID",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "senderName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "senderEmail": {
+          "type": "string",
+          "maxLength": 320
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "snippet": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "receivedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "isUnread": {
+          "type": "boolean"
+        },
+        "isDemo": {
+          "type": "boolean"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["urgent", "important", "normal", "promotions"]
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "actionRequired": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "deadline": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "deadlineConfidence": {
+          "type": "string",
+          "enum": ["explicit", "ambiguous", "none"]
+        },
+        "suggestedAction": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "actionCompleted": {
+          "type": "boolean"
+        },
+        "reminderCreated": {
+          "type": "boolean"
+        },
+        "analyzedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "messageId",
+        "threadId",
+        "senderName",
+        "senderEmail",
+        "subject",
+        "snippet",
+        "receivedAt",
+        "isUnread",
+        "isDemo",
+        "priority",
+        "summary",
+        "reason",
+        "actionRequired",
+        "deadline",
+        "deadlineConfidence",
+        "suggestedAction",
+        "actionCompleted",
+        "reminderCreated",
+        "analyzedAt",
+        "updatedAt"
+      ]
+    },
+    "AlertLog": {
+      "title": "AlertLog",
+      "description": "Delivery log for urgent mobile push and WhatsApp notifications",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "channel": {
+          "type": "string",
+          "enum": ["push", "whatsapp"]
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["urgent", "important"]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 700
+        },
+        "status": {
+          "type": "string",
+          "enum": ["queued", "sent", "failed", "skipped_quiet_hours", "unconfigured"]
+        },
+        "errorDetail": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "messageId",
+        "channel",
+        "priority",
+        "title",
+        "body",
+        "status",
+        "errorDetail",
+        "createdAt"
+      ]
+    },
+    "DeadlineReminder": {
+      "title": "DeadlineReminder",
+      "description": "User-confirmed reminder created from an extracted email deadline",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "dueDate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "messageId",
+        "title",
+        "dueDate",
+        "notes",
+        "completed",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile and onboarding status owned strictly by {userId}"
+    },
+    "/users/{userId}/preferences/{prefId}": {
+      "schema": { "$ref": "#/entities/UserPreferences" },
+      "description": "User priority and notification preferences"
+    },
+    "/users/{userId}/whatsapp/{configId}": {
+      "schema": { "$ref": "#/entities/WhatsAppConfig" },
+      "description": "User WhatsApp phone number and opt-in configuration"
+    },
+    "/users/{userId}/emailInsights/{messageId}": {
+      "schema": { "$ref": "#/entities/EmailInsight" },
+      "description": "Minimal metadata and Gemini AI analysis keyed by Gmail message ID"
+    },
+    "/users/{userId}/alerts/{alertId}": {
+      "schema": { "$ref": "#/entities/AlertLog" },
+      "description": "Notification delivery log for deduplication and status tracking"
+    },
+    "/users/{userId}/reminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/DeadlineReminder" },
+      "description": "User-confirmed deadline reminders"
+    }
+  }
+}

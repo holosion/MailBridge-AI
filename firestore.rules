@@ -1,0 +1,321 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Hardened Primitives ---
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isStringBounded(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    // Startup connectivity probe
+    match /test/connection {
+      allow get: if isSignedIn();
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'email', 'displayName', 'onboardingCompleted',
+          'gmailConnected', 'aiConsentGranted', 'darkMode', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'onboardingCompleted',
+          'gmailConnected', 'aiConsentGranted', 'darkMode', 'createdAt', 'updatedAt'
+        ])
+        && data.uid == userId
+        && isValidId(data.uid)
+        && isStringBounded(data.email, 3, 320)
+        && isStringBounded(data.displayName, 0, 120)
+        && data.onboardingCompleted is bool
+        && data.gmailConnected is bool
+        && data.aiConsentGranted is bool
+        && data.darkMode is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPreferences(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'focusCategories', 'prioritySenders', 'sensitivity',
+          'quietHoursEnabled', 'quietHoursStart', 'quietHoursEnd',
+          'pushAlertsEnabled', 'whatsappAlertsEnabled', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'focusCategories', 'prioritySenders', 'sensitivity',
+          'quietHoursEnabled', 'quietHoursStart', 'quietHoursEnd',
+          'pushAlertsEnabled', 'whatsappAlertsEnabled', 'updatedAt'
+        ])
+        && data.uid == userId
+        && isValidId(data.uid)
+        && data.focusCategories is list
+        && data.focusCategories.size() <= 10
+        && (data.focusCategories.size() == 0 || (data.focusCategories[0] is string && data.focusCategories[0].size() <= 64))
+        && data.prioritySenders is list
+        && data.prioritySenders.size() <= 25
+        && (data.prioritySenders.size() == 0 || (data.prioritySenders[0] is string && data.prioritySenders[0].size() <= 320))
+        && data.sensitivity in ['balanced', 'strict', 'high_recall']
+        && data.quietHoursEnabled is bool
+        && isStringBounded(data.quietHoursStart, 5, 5)
+        && data.quietHoursStart.matches('^([01]\\d|2[0-3]):[0-5]\\d$')
+        && isStringBounded(data.quietHoursEnd, 5, 5)
+        && data.quietHoursEnd.matches('^([01]\\d|2[0-3]):[0-5]\\d$')
+        && data.pushAlertsEnabled is bool
+        && data.whatsappAlertsEnabled is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWhatsAppConfig(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'phoneNumber', 'verified', 'verificationStatus',
+          'optInGranted', 'lastTestStatus', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'phoneNumber', 'verified', 'verificationStatus',
+          'optInGranted', 'lastTestStatus', 'updatedAt'
+        ])
+        && data.uid == userId
+        && isValidId(data.uid)
+        && isStringBounded(data.phoneNumber, 0, 24)
+        && data.verified is bool
+        && data.verificationStatus in ['unconfigured', 'pending_verification', 'verified', 'disabled']
+        && data.optInGranted is bool
+        && isStringBounded(data.lastTestStatus, 0, 200)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEmailInsight(data, userId, msgId) {
+      return data.keys().hasAll([
+          'uid', 'messageId', 'threadId', 'senderName', 'senderEmail',
+          'subject', 'snippet', 'receivedAt', 'isUnread', 'isDemo',
+          'priority', 'summary', 'reason', 'actionRequired', 'deadline',
+          'deadlineConfidence', 'suggestedAction', 'actionCompleted',
+          'reminderCreated', 'analyzedAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'messageId', 'threadId', 'senderName', 'senderEmail',
+          'subject', 'snippet', 'receivedAt', 'isUnread', 'isDemo',
+          'priority', 'summary', 'reason', 'actionRequired', 'deadline',
+          'deadlineConfidence', 'suggestedAction', 'actionCompleted',
+          'reminderCreated', 'analyzedAt', 'updatedAt'
+        ])
+        && data.uid == userId
+        && data.messageId == msgId
+        && isValidId(data.uid)
+        && isValidId(data.messageId)
+        && isStringBounded(data.threadId, 1, 128)
+        && isStringBounded(data.senderName, 0, 160)
+        && isStringBounded(data.senderEmail, 0, 320)
+        && isStringBounded(data.subject, 0, 300)
+        && isStringBounded(data.snippet, 0, 500)
+        && isStringBounded(data.receivedAt, 1, 64)
+        && data.isUnread is bool
+        && data.isDemo is bool
+        && data.priority in ['urgent', 'important', 'normal', 'promotions']
+        && isStringBounded(data.summary, 1, 600)
+        && isStringBounded(data.reason, 1, 400)
+        && isStringBounded(data.actionRequired, 0, 400)
+        && isStringBounded(data.deadline, 0, 80)
+        && data.deadlineConfidence in ['explicit', 'ambiguous', 'none']
+        && isStringBounded(data.suggestedAction, 0, 300)
+        && data.actionCompleted is bool
+        && data.reminderCreated is bool
+        && data.analyzedAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAlertLog(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'messageId', 'channel', 'priority', 'title',
+          'body', 'status', 'errorDetail', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'messageId', 'channel', 'priority', 'title',
+          'body', 'status', 'errorDetail', 'createdAt'
+        ])
+        && data.uid == userId
+        && isValidId(data.uid)
+        && isValidId(data.messageId)
+        && data.channel in ['push', 'whatsapp']
+        && data.priority in ['urgent', 'important']
+        && isStringBounded(data.title, 1, 180)
+        && isStringBounded(data.body, 1, 700)
+        && data.status in ['queued', 'sent', 'failed', 'skipped_quiet_hours', 'unconfigured']
+        && isStringBounded(data.errorDetail, 0, 300)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidReminder(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'messageId', 'title', 'dueDate', 'notes', 'completed', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'messageId', 'title', 'dueDate', 'notes', 'completed', 'createdAt', 'updatedAt'
+        ])
+        && data.uid == userId
+        && isValidId(data.uid)
+        && isValidId(data.messageId)
+        && isStringBounded(data.title, 1, 200)
+        && isStringBounded(data.dueDate, 1, 80)
+        && isStringBounded(data.notes, 0, 400)
+        && data.completed is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'onboardingCompleted', 'gmailConnected',
+          'aiConsentGranted', 'darkMode', 'updatedAt'
+        ]);
+      allow delete: if isValidId(userId) && isOwner(userId);
+
+      match /preferences/{prefId} {
+        allow get: if isValidId(userId) && isValidId(prefId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && existing().uid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(prefId)
+          && prefId == 'settings'
+          && isOwner(userId)
+          && isValidUserPreferences(incoming(), userId)
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isValidId(prefId)
+          && prefId == 'settings'
+          && isOwner(userId)
+          && isValidUserPreferences(incoming(), userId)
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'focusCategories', 'prioritySenders', 'sensitivity',
+            'quietHoursEnabled', 'quietHoursStart', 'quietHoursEnd',
+            'pushAlertsEnabled', 'whatsappAlertsEnabled', 'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(prefId) && isOwner(userId);
+      }
+
+      match /whatsapp/{configId} {
+        allow get: if isValidId(userId) && isValidId(configId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && existing().uid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(configId)
+          && configId == 'config'
+          && isOwner(userId)
+          && isValidWhatsAppConfig(incoming(), userId)
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isValidId(configId)
+          && configId == 'config'
+          && isOwner(userId)
+          && isValidWhatsAppConfig(incoming(), userId)
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'phoneNumber', 'verified', 'verificationStatus',
+            'optInGranted', 'lastTestStatus', 'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(configId) && isOwner(userId);
+      }
+
+      match /emailInsights/{messageId} {
+        allow get: if isValidId(userId) && isValidId(messageId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && existing().uid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(messageId)
+          && isOwner(userId)
+          && isValidEmailInsight(incoming(), userId, messageId)
+          && incoming().analyzedAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isValidId(messageId)
+          && isOwner(userId)
+          && isValidEmailInsight(incoming(), userId, messageId)
+          && incoming().uid == existing().uid
+          && incoming().messageId == existing().messageId
+          && incoming().analyzedAt == existing().analyzedAt
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['actionCompleted', 'updatedAt'])
+            || incoming().diff(existing()).affectedKeys().hasOnly(['reminderCreated', 'updatedAt'])
+            || incoming().diff(existing()).affectedKeys().hasOnly(['isUnread', 'updatedAt'])
+            || incoming().diff(existing()).affectedKeys().hasOnly([
+              'priority', 'summary', 'reason', 'actionRequired',
+              'deadline', 'deadlineConfidence', 'suggestedAction', 'isUnread', 'updatedAt'
+            ])
+          );
+        allow delete: if isValidId(userId) && isValidId(messageId) && isOwner(userId);
+      }
+
+      match /alerts/{alertId} {
+        allow get: if isValidId(userId) && isValidId(alertId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && existing().uid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(alertId)
+          && isOwner(userId)
+          && isValidAlertLog(incoming(), userId)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(alertId) && isOwner(userId);
+      }
+
+      match /reminders/{reminderId} {
+        allow get: if isValidId(userId) && isValidId(reminderId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && existing().uid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(reminderId)
+          && isOwner(userId)
+          && isValidReminder(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isValidId(reminderId)
+          && isOwner(userId)
+          && isValidReminder(incoming(), userId)
+          && incoming().uid == existing().uid
+          && incoming().messageId == existing().messageId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['completed', 'title', 'dueDate', 'notes', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(reminderId) && isOwner(userId);
+      }
+    }
+  }
+}

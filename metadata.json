@@ -1,0 +1,6 @@
+{
+  "name": "MailBridge AI",
+  "description": "Intelligent email assistant that connects securely to Gmail, analyzes incoming messages with Gemini AI to classify priority, summarize threads, extract deadlines and action items, and deliver urgent alerts via mobile notifications and WhatsApp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
