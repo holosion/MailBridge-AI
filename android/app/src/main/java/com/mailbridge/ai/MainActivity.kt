@@ -4,6 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mailbridge.ai.ui.AccountViewModel
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -84,6 +92,36 @@ fun MailBridgeMainScreen(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
+    val account: AccountViewModel = viewModel()
+    val state by account.state.collectAsState()
+    val activity = LocalContext.current as ComponentActivity
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
+        account.consentResult(activity, it.resultCode, it.data)
+    }
+    val connect: () -> Unit = {
+        account.connectGmail(activity) { consent.launch(IntentSenderRequest.Builder(it.intentSender).build()) }
+    }
+    if (state.email == null) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                MailBridgeLogoMark()
+                Spacer(Modifier.height(20.dp))
+                Text("Welcome to MailBridge AI", style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.height(12.dp))
+                Text("Sign in with your Google account. You can connect Gmail separately with read-only permission.")
+                Spacer(Modifier.height(24.dp))
+                Button(onClick = { account.signIn(activity) }, enabled = !state.busy) {
+                    Text(if (state.busy) "Signing in…" else "Sign in with Google")
+                }
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 16.dp)) }
+            }
+        }
+        return
+    }
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
@@ -127,21 +165,46 @@ fun MailBridgeMainScreen(
             }
         }
     ) { padding ->
+        Column(Modifier.padding(padding)) {
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
+        if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         NavHost(
             navController = navController,
             startDestination = "home",
-            modifier = Modifier.padding(padding)
+            modifier = Modifier.weight(1f)
         ) {
             composable("home") {
                 Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
                     Text("Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Connect Google Sign-In and Gmail Read-Only OAuth to begin AI triage.")
+                    Text("Signed in as ${state.email}")
+                    Spacer(Modifier.height(16.dp))
+                    Text(if (state.gmailConnected) "Gmail connected · ${state.messages.size} recent emails" else "Connect Gmail to view your recent emails. MailBridge cannot send, change, or delete your mail.")
+                    Button(onClick = connect, enabled = !state.busy, modifier = Modifier.padding(top = 16.dp)) {
+                        Text(if (state.gmailConnected) "Refresh inbox" else "Connect Gmail")
+                    }
                 }
             }
             composable("inbox") {
-                Box(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-                    Text("Smart Gmail Inbox — Urgent / Important / Normal / Promotions")
+                Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                    Text("Inbox", style = MaterialTheme.typography.headlineSmall)
+                    Text(state.email.orEmpty())
+                    Button(onClick = connect, enabled = !state.busy) {
+                        Text(if (state.gmailConnected) "Refresh inbox" else "Connect Gmail")
+                    }
+                    if (state.gmailConnected && state.messages.isEmpty()) Text("Your inbox is empty.")
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(state.messages, key = { it.messageId }) { message ->
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(16.dp)) {
+                                    Text(message.senderName, fontWeight = FontWeight.Bold)
+                                    Text(message.subject, style = MaterialTheme.typography.titleMedium)
+                                    Text(message.snippet, maxLines = 4)
+                                    if (message.isUnread) Text("Unread", color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             composable("insights") {
@@ -156,12 +219,20 @@ fun MailBridgeMainScreen(
             }
             composable("settings") {
                 Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                    Text("Google account", style = MaterialTheme.typography.titleMedium)
+                    Text(state.email.orEmpty())
+                    Text(if (state.gmailConnected) "Gmail connected (read-only)" else "Gmail not connected")
+                    Button(onClick = connect, enabled = !state.busy) { Text("Connect / refresh Gmail") }
+                    OutlinedButton(onClick = account::signOut, enabled = !state.busy) { Text("Sign out") }
+                    Text("Signing out clears mail from this app. To revoke Gmail permission, remove MailBridge in your Google Account's third-party connections.", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Dark Mode", modifier = Modifier.weight(1f))
                         Switch(checked = darkTheme, onCheckedChange = { onToggleTheme() })
                     }
                 }
             }
+        }
         }
     }
 }

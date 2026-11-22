@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+.next/
+next-env.d.ts
+*.tsbuildinfo
+android/.gradle/
+android/local.properties
+android/.idea/
+*.jks
+*.keystore
