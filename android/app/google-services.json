@@ -1,27 +1,44 @@
 {
   "project_info": {
-    "project_number": "53978851048",
-    "firebase_url": "https://gen-lang-client-0066594917.firebaseio.com",
-    "project_id": "gen-lang-client-0066594917",
-    "storage_bucket": "gen-lang-client-0066594917.firebasestorage.app"
+    "project_number": "639503397657",
+    "project_id": "mailbridge-ai-89410",
+    "storage_bucket": "mailbridge-ai-89410.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:53978851048:android:99d0d0a25789693e2e0b5d",
+        "mobilesdk_app_id": "1:639503397657:android:d06584592491aeb6c5cb88",
         "android_client_info": {
           "package_name": "com.mailbridge.ai"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "639503397657-rplcnmtnjuq713m2leha6qqogmo0aqdg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mailbridge.ai",
+            "certificate_hash": "a7f1786f4aaab82f236b7e4000707d50341e91f6"
+          }
+        },
+        {
+          "client_id": "639503397657-tti92rpva8vevt1pvb9dblttu1qicfej.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyCSZmMiyGuZ5t0IeOpaIlIUk_mSLubo4w"
+          "current_key": "AIzaSyAwhEimYPA9rL7uDSuYZQbW9F3ksZ27kY0"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "639503397657-tti92rpva8vevt1pvb9dblttu1qicfej.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
